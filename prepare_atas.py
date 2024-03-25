@@ -19,7 +19,7 @@ def split_in_batches(d, n=8):
         yield batch
         
 async def prepare_atas():
-    mint = Pubkey.from_string("GJzuWLMkah7XW82wXfZbovRZHaKU9FmPrWn8mktUX7Po")
+    mint = Pubkey.from_string("DkfmExBaNvggTYxvMi3mnVSS3DiQZUi8tapGqbzLeByF")
 
     with open('id.json', 'r') as file:
         secret = json.load(file)

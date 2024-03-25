@@ -8,9 +8,10 @@ from spl.token.instructions import initialize_mint,get_associated_token_address,
 from solders.keypair import Keypair
 from solders.system_program import create_account,CreateAccountParams
 from spl.token._layouts import MINT_LAYOUT
+from solders.compute_budget import set_compute_unit_price
 
 async def prepare_mint_and_distributor():
-    client = AsyncClient("https://api.devnet.solana.com")
+    client = AsyncClient("https://api.devnet.solana.com", "confirmed")
     
     new_mint = Keypair()
     print(f"Test mint pubkey: {new_mint.pubkey()}")
@@ -21,7 +22,7 @@ async def prepare_mint_and_distributor():
     sender = Keypair.from_json(str(secret))
     sender_ata = get_associated_token_address(sender.pubkey(), new_mint.pubkey())
 
-    transaction = Transaction()
+    transaction = Transaction(fee_payer=sender.pubkey()).add(set_compute_unit_price(5000))
     lamports = (await client.get_minimum_balance_for_rent_exemption(MINT_LAYOUT.sizeof())).value
     transaction.add(create_account(CreateAccountParams(
         from_pubkey=sender.pubkey(),
@@ -43,7 +44,7 @@ async def prepare_mint_and_distributor():
 
     transaction.add(create_associated_token_account(sender.pubkey(), sender.pubkey(), new_mint.pubkey()))
     
-    amount_to_transfer = 10000000 * 10**8
+    amount_to_transfer = 10000000 * 10 ** 8
     transaction.add(mint_to(MintToParams(
         amount=amount_to_transfer,
         dest=sender_ata,
@@ -58,7 +59,6 @@ async def prepare_mint_and_distributor():
     serialized_tx = transaction.serialize()
     signature = (await client.send_raw_transaction(serialized_tx)).value
     print(f"https://explorer.solana.com/tx/{signature}?cluster=devnet")
-
-    await client.close()
+    await client.confirm_transaction(signature, "confirmed")
 
 asyncio.run(prepare_mint_and_distributor())

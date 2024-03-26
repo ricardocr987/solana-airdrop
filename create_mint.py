@@ -60,5 +60,7 @@ async def prepare_mint_and_distributor():
     signature = (await client.send_raw_transaction(serialized_tx)).value
     print(f"https://explorer.solana.com/tx/{signature}?cluster=devnet")
     await client.confirm_transaction(signature, "confirmed")
+    
+    await client.close()
 
 asyncio.run(prepare_mint_and_distributor())

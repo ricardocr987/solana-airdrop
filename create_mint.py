@@ -11,7 +11,7 @@ from spl.token._layouts import MINT_LAYOUT
 from solders.compute_budget import set_compute_unit_price
 
 async def prepare_mint_and_distributor():
-    client = AsyncClient("https://api.devnet.solana.com", "confirmed")
+    client = AsyncClient("", "confirmed")
     
     new_mint = Keypair()
     print(f"Test mint pubkey: {new_mint.pubkey()}")
@@ -44,7 +44,7 @@ async def prepare_mint_and_distributor():
 
     transaction.add(create_associated_token_account(sender.pubkey(), sender.pubkey(), new_mint.pubkey()))
     
-    amount_to_transfer = 10000000 * 10 ** 8
+    amount_to_transfer = 1000000000 * 10 ** 8
     transaction.add(mint_to(MintToParams(
         amount=amount_to_transfer,
         dest=sender_ata,

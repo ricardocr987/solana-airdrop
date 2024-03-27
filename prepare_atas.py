@@ -6,6 +6,7 @@ from solana.transaction import Transaction
 from spl.token.instructions import create_associated_token_account,get_associated_token_address
 from solders.pubkey import Pubkey
 from solders.keypair import Keypair
+from solders.compute_budget import set_compute_unit_price
 
 def split_in_batches(d, n=8):
     it = iter(d)
@@ -19,7 +20,7 @@ def split_in_batches(d, n=8):
         yield batch
         
 async def prepare_atas():
-    mint = Pubkey.from_string("DkfmExBaNvggTYxvMi3mnVSS3DiQZUi8tapGqbzLeByF")
+    mint = Pubkey.from_string("75bDMEcLCdziH4Ej5Q72LsKPzphgmU4UL3H7ck8FsfLz")
 
     with open('id.json', 'r') as file:
         secret = json.load(file)
@@ -29,10 +30,10 @@ async def prepare_atas():
     with open('balances_post_content.json', 'r') as file:
         balances_post_content = json.load(file)
     
-    client = AsyncClient("https://api.devnet.solana.com")
+    client = AsyncClient("")
     
     for batch in split_in_batches(balances_post_content):
-        transaction = Transaction()
+        transaction = Transaction(fee_payer=sender.pubkey()).add(set_compute_unit_price(5000))
 
         for address, balance in batch.items():
             receiver_public_key = Pubkey.from_string(address)
@@ -42,10 +43,10 @@ async def prepare_atas():
         blockhash = await client.get_latest_blockhash()
         transaction.recent_blockhash = blockhash.value.blockhash
         transaction.sign(sender)
-        transaction.sign(sender)
         serialized_tx = transaction.serialize()
         signature = (await client.send_raw_transaction(serialized_tx)).value
-        print(f"https://explorer.solana.com/tx/{signature}?cluster=devnet")
+        await client.confirm_transaction(signature, "confirmed")
+        print(f"https://explorer.solana.com/tx/{signature}")
 
     await client.close()
 

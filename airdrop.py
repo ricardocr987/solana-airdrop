@@ -1,8 +1,6 @@
 import asyncio
 import json
-import numpy as np
 import os
-
 from typing import Dict
 from solana.rpc.async_api import AsyncClient
 from solana.transaction import Transaction
@@ -13,22 +11,39 @@ from solders.keypair import Keypair
 from solders.compute_budget import set_compute_unit_price
 
 async def get_priority_fee(client: AsyncClient):
-    block_height = (await client.get_block_height()).value
+    # note: not getting last block to avoid LongTermStorageSlotSkippedMessage error
+    block_height = (await client.get_block_height()).value - 5
     block_data = (await client.get_block(block_height, max_supported_transaction_version=0)).value
     if block_data.transactions is None:
         return None
     
-    fees = [
-        tx.meta.fee
+    transactions_info = [
+        {'fee': tx.meta.fee, 'compute_units_consumed': tx.meta.compute_units_consumed}
         for tx in block_data.transactions
-        if tx.meta is not None and tx.meta.fee is not None
+        if tx.meta.fee > 5000 and tx.meta.compute_units_consumed is not None and tx.meta.compute_units_consumed > 0
     ]
     
-    # note: deleted base fees to get median priority fee
-    return int(np.median(fees)) - 5000 if fees else None
+    priority_fees = [
+        (tx_info['fee'] - 5000) / tx_info['compute_units_consumed']
+        for tx_info in transactions_info
+    ]
+    priority_fees.sort()
 
-# note: the batch could be bigger but when more CU wasted, less likely the transaction is confirmed
-def split_in_batches(d, n=15):
+    median_priority_fee = 0
+    if priority_fees:
+        n = len(priority_fees)
+        if n % 2 == 0:
+            median_priority_fee = (priority_fees[n // 2 - 1] + priority_fees[n // 2]) / 2
+        else:
+            median_priority_fee = priority_fees[n // 2]
+
+    print("Median Priority Fee:", round(int(median_priority_fee * 10 ** 6), 0))
+    # convert to micro-lamports
+    return round(int(median_priority_fee * 10 ** 6), 0)
+
+# note: batch could be bigger, but spending more CU increase the time it takes 
+# for the transaction to be included in a block, so bigger txn, less likely to get confirmed
+def split_in_batches(d, n=5):
     it = iter(d)
     batch = {}
     for key in it:
@@ -50,13 +65,22 @@ async def distribute(
 ) -> bool:
     retry_count = 0
     while retry_count < max_retries:
+        # in case we receive closed associated token accounts (it should not happen)
+        addresses_to_remove = []
+        
         try:
             transaction = Transaction(fee_payer=sender.pubkey()).add(set_compute_unit_price(priority_fee))
                       
             for address, balance in batch.items():
-                # note: modify this, we will get atas directly from the indexer
                 receiver_public_key = Pubkey.from_string(address)
                 receiver_ata = get_associated_token_address(receiver_public_key, mint)
+                
+                balance_info = await client.get_balance(receiver_ata)
+                if balance_info.value == 0:
+                    print(f"No associated token account for {address}")
+                    addresses_to_remove.append(address)
+                    continue
+                
                 rounded_balance = round(balance, 8)
                 amount_to_transfer = int(rounded_balance * 10 ** 8)
 
@@ -69,6 +93,14 @@ async def distribute(
                 ))
                 transaction.add(instruction)
             
+            # Remove addresses without ATAs from the batch
+            for address in addresses_to_remove:
+                del batch[address]
+            
+            # If there is only set_compute_unit_price instruction, the distribution is finished
+            if len(transaction.instructions) == 1:
+                return True
+
             blockhash = (await client.get_latest_blockhash()).value.blockhash
             transaction.recent_blockhash = blockhash
             transaction.sign(sender)
@@ -78,22 +110,21 @@ async def distribute(
             print(f"Transaction confirmed: https://explorer.solana.com/tx/{signature}")
             return True
         
-        except Exception:
-            print(f"Attempt {retry_count + 1}: Error")
+        except Exception as e:
+            print(f"Attempt {retry_count + 1}: Error - {e}")
             retry_count += 1
             await asyncio.sleep(5)
     
-    print("Failed to process batch after maximum retries.")
     return False
 
 async def main():
-    client = AsyncClient("https://api.devnet.solana.com")
+    client = AsyncClient("")
     priority_fee = await get_priority_fee(client)
     
     with open('id.json', 'r') as file:
         secret = json.load(file)
         
-    mint = Pubkey.from_string("DkfmExBaNvggTYxvMi3mnVSS3DiQZUi8tapGqbzLeByF")
+    mint = Pubkey.from_string("75bDMEcLCdziH4Ej5Q72LsKPzphgmU4UL3H7ck8FsfLz")
     sender = Keypair.from_json(str(secret))
     sender_ata = get_associated_token_address(sender.pubkey(), mint)
     

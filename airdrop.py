@@ -72,11 +72,10 @@ async def distribute(
             transaction = Transaction(fee_payer=sender.pubkey()).add(set_compute_unit_price(priority_fee))
                       
             for address, balance in batch.items():
-                receiver_public_key = Pubkey.from_string(address)
-                receiver_ata = get_associated_token_address(receiver_public_key, mint)
+                receiver_ata = Pubkey.from_string(address)
                 
                 balance_info = await client.get_balance(receiver_ata)
-                if balance_info.value == 0:
+                if balance_info.value is None:
                     print(f"No associated token account for {address}")
                     addresses_to_remove.append(address)
                     continue
@@ -124,7 +123,7 @@ async def main():
     with open('id.json', 'r') as file:
         secret = json.load(file)
         
-    mint = Pubkey.from_string("75bDMEcLCdziH4Ej5Q72LsKPzphgmU4UL3H7ck8FsfLz")
+    mint = Pubkey.from_string("3hAY8CoHkaNUB76hedQyNER8Zrp989heEj72PiXKw4Lm")
     sender = Keypair.from_json(str(secret))
     sender_ata = get_associated_token_address(sender.pubkey(), mint)
     
@@ -140,7 +139,7 @@ async def main():
 
         if not success:
             all_batches_successful = False
-            print("A batch failed to process. Stopping distribution.")
+            print("A batch failed 5 times. Stopping distribution.")
             break
         
         successful_transactions.update(batch)

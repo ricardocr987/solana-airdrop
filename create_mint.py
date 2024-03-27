@@ -11,7 +11,7 @@ from spl.token._layouts import MINT_LAYOUT
 from solders.compute_budget import set_compute_unit_price
 
 async def prepare_mint_and_distributor():
-    client = AsyncClient("", "confirmed")
+    client = AsyncClient("")
     
     new_mint = Keypair()
     print(f"Test mint pubkey: {new_mint.pubkey()}")
@@ -22,7 +22,7 @@ async def prepare_mint_and_distributor():
     sender = Keypair.from_json(str(secret))
     sender_ata = get_associated_token_address(sender.pubkey(), new_mint.pubkey())
 
-    transaction = Transaction(fee_payer=sender.pubkey()).add(set_compute_unit_price(5000))
+    transaction = Transaction(fee_payer=sender.pubkey()).add(set_compute_unit_price(6000))
     lamports = (await client.get_minimum_balance_for_rent_exemption(MINT_LAYOUT.sizeof())).value
     transaction.add(create_account(CreateAccountParams(
         from_pubkey=sender.pubkey(),
@@ -58,9 +58,9 @@ async def prepare_mint_and_distributor():
     transaction.sign(sender, new_mint)
     serialized_tx = transaction.serialize()
     signature = (await client.send_raw_transaction(serialized_tx)).value
-    print(f"https://explorer.solana.com/tx/{signature}?cluster=devnet")
-    await client.confirm_transaction(signature, "confirmed")
-    
+    await client.confirm_transaction(signature, "finalized")
+    print(f"https://explorer.solana.com/tx/{signature}")
+
     await client.close()
 
 asyncio.run(prepare_mint_and_distributor())
